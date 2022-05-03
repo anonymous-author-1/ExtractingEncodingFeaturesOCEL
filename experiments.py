@@ -49,7 +49,7 @@ filename = "example_logs/mdl/BPI2017-Final.csv"
 ots = ["application", "offer"]
 
 
-event_df = pd.read_csv(filename, sep=',')[:2000]
+event_df = pd.read_csv(filename, sep=',')#[:2000]
 event_df["event_timestamp"] = pd.to_datetime(event_df["event_timestamp"])
 event_df = event_df.sort_values(by='event_timestamp')
 
