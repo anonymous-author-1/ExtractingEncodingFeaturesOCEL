@@ -1,19 +1,6 @@
 import os
-import json
-dd = os.path.join(os.path.expanduser('~'),'.dgl')
-#print(dd)
-dd = os.path.join(dd,'config.json')
-#print(dd)
-with open(dd, "r") as config_file:
-    config_dict = json.load(config_file)
-    backend_name = config_dict.get('backend', '').lower()
-print(backend_name)
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-#print(os.environ['DGLBACKEND'])
-#os.environ['DGLBACKEND'] = "tensorflow"
 os.environ['DGLBACKEND'] = 'tensorflow'
-#print(os.environ['DGLBACKEND'])
-#os.environ['DGLBACKEND'] = ["tensorflow"]
 import dgl
 import numpy as np
 import pandas as pd
