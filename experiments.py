@@ -97,6 +97,7 @@ for g in tqdm(feature_storage.feature_graphs):
     
 label_order = None
 
+accuracy_dict = {}
 
 #CASE STUDY 1 - VISUALIZING TABLE
 if True:
@@ -193,6 +194,11 @@ if True:
     #test = test.reset_index()
     #test = test.drop(['index'], axis=1)
     plt.clf()
+    accuracy_dict['regression'] = {
+        'train_MAE': mean_absolute_error(y_train, model.predict(x_train)),
+        'test_MAE': mean_absolute_error(y_test, y_pred)
+    }
+    print(pd.DataFrame(accuracy_dict))
     if True:
         explainer = shap.Explainer(model.predict, x_train,feature_names=x_train.columns.tolist())
         shap_values = explainer(x_test[:1000])
@@ -263,6 +269,11 @@ if True:
     print('MAE baseline: ', mean_absolute_error(y_test, [avg_rem for elem in y_test]))
     print('MAE: ', mean_absolute_error(y_test, y_pred))
     #test = pd.DataFrame({'Predicted value': y_pred, 'Actual value': y_test})
+    accuracy_dict['lstm'] = {
+        'train_MAE': mean_absolute_error(y_train, regressor.predict(x_train)),
+        'test_MAE': mean_absolute_error(y_test, y_pred)
+    }
+    print(pd.DataFrame(accuracy_dict))
     fig = plt.figure(figsize=(7, 6))
     #test = test.reset_index()
     #test = test.drop(['index'], axis=1)
@@ -418,7 +429,11 @@ if True:
     print(tf.keras.losses.mean_absolute_error(np.array(y_test), np.repeat(mean_prediction, len(y_test))).numpy())
     print('MAE GNN: ')
     print(tf.keras.metrics.mean_absolute_error(np.squeeze(test_labels), np.squeeze(test_predictions)).numpy())
-
+    accuracy_dict['gnn'] = {
+        'train_MAE': mean_absolute_error(train_predictions, train_labels),
+        'test_MAE': mean_absolute_error(test_predictions, test_labels)
+    }
+    print(pd.DataFrame(accuracy_dict))
     # calculate shap values for the presence of edges for sample instance
     test_graph = x_test[2]
     #visualize_instance(test_graph, y_test[2])
@@ -466,3 +481,5 @@ if True:
     nx.draw(nx_G, pos, with_labels = True, node_color=[[.7, .7, .7]], font_size = 10)
     nx.draw_networkx_edge_labels(nx_G, pos, edge_labels = edge_labels)
     plt.savefig('shap_graph.png')
+    print(pd.DataFrame(accuracy_dict))
+    pd.DataFrame(accuracy_dict).to_csv('results_table.csv')
