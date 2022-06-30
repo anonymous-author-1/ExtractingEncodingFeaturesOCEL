@@ -88,6 +88,13 @@ feature_storage.extract_normalized_train_test_split(0.3,state = 3)
 #F = [(feature_extraction.EVENT_NUM_OF_OBJECTS,()),(feature_extraction.EVENT_TYPE_COUNT,("offer",)),(feature_extraction.EVENT_PRECEDING_ACTIVITES,("Create application",)),(feature_extraction.EVENT_PREVIOUS_ACTIVITY_COUNT,("Create application",)),(feature_extraction.EVENT_CURRENT_ACTIVITIES,("Create application",)),(feature_extraction.EVENT_AGG_PREVIOUS_CHAR_VALUES,("fake_feat",sum)),(feature_extraction.EVENT_PRECEDING_CHAR_VALUES,("fake_feat",sum)),(feature_extraction.EVENT_CHAR_VALUE,("fake_feat",)),(feature_extraction.EVENT_CURRENT_RESOURCE_WORKLOAD,("fake_feat",timedelta(days=1))),(feature_extraction.EVENT_CURRENT_TOTAL_WORKLOAD,("fake_feat",timedelta(days=1))),(feature_extraction.EVENT_RESOURCE,("fake_feat",1)),(feature_extraction.EVENT_CURRENT_TOTAL_OBJECT_COUNT,(timedelta(days=1),)),(feature_extraction.EVENT_PREVIOUS_OBJECT_COUNT,()),(feature_extraction.EVENT_PREVIOUS_TYPE_COUNT,("offer",)),(feature_extraction.EVENT_OBJECTS,(('application', "{'Application_1966208034'}"),)),(feature_extraction.EVENT_EXECUTION_DURATION,()),(feature_extraction.EVENT_ELAPSED_TIME,()),(feature_extraction.EVENT_REMAINING_TIME,()),(feature_extraction.EVENT_FLOW_TIME,(ocpn,)),(feature_extraction.EVENT_SYNCHRONIZATION_TIME,(ocpn,)),(feature_extraction.EVENT_POOLING_TIME,(ocpn,"offer")),(feature_extraction.EVENT_WAITING_TIME,(ocpn,"event_start_timestamp"))]
 #ocpn = ocpn_discovery_factory.apply(ocel, parameters={"debug": False})
 
+# keep list of first three events for comparability of regression use case
+events_to_remove = []
+for g in tqdm(feature_storage.feature_graphs):
+    event_ids = [n.event_id for n in g.nodes]
+    event_ids.sort()
+    events_to_remove = events_to_remove + event_ids[:3]
+    
 label_order = None
 
 
@@ -148,8 +155,9 @@ if True:
     print("___________________________")
     print("USE CASE 2 - Regression prediction")
     print("___________________________")
-    train_table = tabular.construct_table(feature_storage, index_list = feature_storage.training_indices)
-    test_table = tabular.construct_table(feature_storage, index_list = feature_storage.test_indices)
+    train_table = tabular.construct_table(feature_storage, index_list = feature_storage.training_indices, exclude_events = events_to_remove)
+    test_table = tabular.construct_table(feature_storage, index_list = feature_storage.test_indices, exclude_events = events_to_remove)
+
 
     y_train, y_test = train_table[F[0]], test_table[F[0]]
     x_train, x_test = train_table.drop(F[0], axis = 1), test_table.drop(F[0], axis = 1)
