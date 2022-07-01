@@ -37,6 +37,26 @@ def preceding_activities(node, ocel, params):
             count+=1
     return count
 
+#ONLY FOR CONTROL - THIS IS A FLATTENED FEATURE!
+def flat_preceding_activity(node, ocel, params):
+    search_act = params[0]
+    e_id = node.event_id
+    in_edges = ocel.eog.in_edges(e_id)
+    if len(in_edges)== 0:
+        return 0
+    last_act = ocel.get_value(list(in_edges)[0][0],"event_activity")
+    last_time = ocel.get_value(list(in_edges)[0][0], "event_timestamp")
+    for (source,target) in in_edges:
+        act = ocel.get_value(source, "event_activity")
+        if ocel.get_value(source,"event_timestamp") > last_time:
+            last_time = ocel.get_value(source,"event_timestamp")
+            last_act = act
+    if last_act == search_act:
+        return 1
+    else:
+        return 0
+
+
 def previous_activity_count(node,ocel,params):
     act = params[0]
     e_id = node.event_id
