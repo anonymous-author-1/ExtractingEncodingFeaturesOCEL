@@ -328,6 +328,9 @@ if True:
         #shap.plots.waterfall(shap_values[0][0], max_display=160, show=False)
         plt.savefig('shap_lstm_instance_'+str(i)+'.png', dpi=600)
 
+
+
+
 #Case study 5 - Graph-based variant visualization
 if True:
     print("___________________________")
@@ -429,6 +432,7 @@ if True:
     print(tf.keras.losses.mean_absolute_error(np.array(y_test), np.repeat(mean_prediction, len(y_test))).numpy())
     print('MAE GNN: ')
     print(tf.keras.metrics.mean_absolute_error(np.squeeze(test_labels), np.squeeze(test_predictions)).numpy())
+    train_predictions, train_labels = evaluate_gnn(train_loader, model)
     accuracy_dict['gnn'] = {
         'train_MAE': mean_absolute_error(train_predictions, train_labels),
         'test_MAE': mean_absolute_error(test_predictions, test_labels)
@@ -481,5 +485,63 @@ if True:
     nx.draw(nx_G, pos, with_labels = True, node_color=[[.7, .7, .7]], font_size = 10)
     nx.draw_networkx_edge_labels(nx_G, pos, edge_labels = edge_labels)
     plt.savefig('shap_graph.png')
+
+#CONTROL
+if True:
+    F_ = [(feature_extraction.EVENT_REMAINING_TIME, ()),
+         (feature_extraction.EVENT_PREVIOUS_TYPE_COUNT, ("offer",)),
+         (feature_extraction.EVENT_ELAPSED_TIME, ())] + [
+            (feature_extraction.EVENT_AGG_PREVIOUS_CHAR_VALUES, ("event_RequestedAmount", max))] \
+        + [(feature_extraction.EVENT_FLAT_PRECEDING_ACTIVITY, (act,)) for act in activities]
+
+    feature_storage_ = feature_extraction.apply(ocel, F_, [])
+    feature_storage_.extract_normalized_train_test_split(0.3, state=3)
+    print("___________________________")
+    print("USE CASE 4 - LSTM prediction with flat")
+    print("___________________________")
+    k = 4
+    features_ = [feat for feat in F_ if feat != (feature_extraction.EVENT_REMAINING_TIME, ())]
+    target = (feature_extraction.EVENT_REMAINING_TIME, ())
+    train_sequences = sequential.construct_sequence(feature_storage_, index_list=feature_storage_.training_indices)
+    test_sequences = sequential.construct_sequence(feature_storage_, index_list=feature_storage_.test_indices)
+
+    x_train, y_train = sequential.construct_k_dataset(train_sequences, k, features_, target)
+    x_test, y_test = sequential.construct_k_dataset(test_sequences, k, features_, target)
+    x_train, x_test, y_train, y_test = np.array(x_train), np.array(x_test), np.array(y_train), np.array(y_test)
+    scaler = StandardScaler()
+    x_train = scaler.fit_transform(x_train.reshape(-1, x_train.shape[-1])).reshape(x_train.shape)
+    x_test = scaler.transform(x_test.reshape(-1, x_test.shape[-1])).reshape(x_test.shape)
+    X100 = shap.utils.sample(x_train, 100)
+    # print(x_train[:25])
+    # print(y_train[:25])
+    # print(x_test[:25])
+    # print(y_test[:25])
+    regressor = Sequential()
+
+    regressor.add(LSTM(units=10, return_sequences=True, input_shape=(x_train.shape[1], x_train.shape[2])))
+    regressor.add(Dropout(0.1))
+    regressor.add(LSTM(units=10))
+    regressor.add(Dropout(0.1))
+    regressor.add(Dense(units=1))
+    regressor.compile(optimizer='adam', loss='mean_squared_error')
+    K.set_value(regressor.optimizer.learning_rate, 0.005)
+    regressor.fit(x_train, y_train, epochs=30, batch_size=64)
+
+    y_pred = regressor.predict(x_test)
+    y_pred = np.transpose(y_pred)
+    y_pred = y_pred[0]
+    # print(y_pred[:10])
+    # print(y_test[:10])
+    avg_rem = avg(y_train)
+    print('MAE baseline: ', mean_absolute_error(y_test, [avg_rem for elem in y_test]))
+    print('MAE: ', mean_absolute_error(y_test, y_pred))
+    accuracy_dict['lstm with flat'] = {
+        'train_MAE': mean_absolute_error(y_train, regressor.predict(x_train)),
+        'test_MAE': mean_absolute_error(y_test, y_pred)
+    }
+    print(pd.DataFrame(accuracy_dict))
+    # test = pd.DataFrame({'Predicted value': y_pred, 'Actual value': y_test})
+    # fig = plt.figure(figsize=(7, 6))
+
     print(pd.DataFrame(accuracy_dict))
     pd.DataFrame(accuracy_dict).to_csv('results_table.csv')
