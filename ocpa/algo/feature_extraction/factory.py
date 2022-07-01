@@ -13,6 +13,7 @@ EVENT_SERVICE_TIME ="event_service"
 EVENT_IDENTITY = "event_identity"
 EVENT_TYPE_COUNT = "event_type_count"
 EVENT_PRECEDING_ACTIVITES = "event_preceding_activities"
+EVENT_FLAT_PRECEDING_ACTIVITY = "event_flat_preceding_activity"
 EVENT_PREVIOUS_ACTIVITY_COUNT = "event_previous_activity_count"
 EVENT_CURRENT_ACTIVITIES = "event_current_activities"
 EVENT_AGG_PREVIOUS_CHAR_VALUES = "event_aggregate_previous_char"
@@ -77,7 +78,8 @@ VERSIONS = {
                   EVENT_WAITING_TIME:event_features.waiting_time,
                   EVENT_SOJOURN_TIME:event_features.sojourn_time,
                   EVENT_SYNCHRONIZATION_TIME:event_features.sojourn_time,
-                  EVENT_FLOW_TIME:event_features.flow_time
+                  EVENT_FLOW_TIME:event_features.flow_time,
+                  EVENT_FLAT_PRECEDING_ACTIVITY:event_features.flat_preceding_activity
 
 
                   },
