@@ -191,3 +191,4 @@ def evaluate_gnn(data_loader, gnn_model):
     predictions = np.concatenate(predictions)
     labels = np.concatenate(labels)
     return predictions, labels
+
