@@ -94,7 +94,7 @@ for g in tqdm(feature_storage.feature_graphs):
     event_ids = [n.event_id for n in g.nodes]
     event_ids.sort()
     events_to_remove = events_to_remove + event_ids[:3]
-    
+
 label_order = None
 
 accuracy_dict = {}
@@ -256,9 +256,12 @@ if True:
     regressor.add(LSTM(units=10))
     regressor.add(Dropout(0.1))
     regressor.add(Dense(units=1))
-    regressor.compile(optimizer='adam', loss='mean_squared_error')
+    regressor.compile(optimizer='adam', loss='mean_squared_error', metrics = 'mae')
     K.set_value(regressor.optimizer.learning_rate, 0.005)
-    regressor.fit(x_train, y_train, epochs=30, batch_size=64)
+    best_weights_callback = tf.keras.callbacks.ModelCheckpoint('lstm_checkpoint.h5', monitor = 'val_loss', save_best_only = True, verbose = 1)
+
+    history = regressor.fit(x_train, y_train, validation_split = 0.2, epochs=30, batch_size=64, callbacks = best_weights_callback)
+    regressor.load_weights('lstm_checkpoint.h5')
 
     y_pred = regressor.predict(x_test)
     y_pred = np.transpose(y_pred)
@@ -270,9 +273,12 @@ if True:
     print('MAE: ', mean_absolute_error(y_test, y_pred))
     #test = pd.DataFrame({'Predicted value': y_pred, 'Actual value': y_test})
     accuracy_dict['lstm'] = {
-        'train_MAE': mean_absolute_error(y_train, regressor.predict(x_train)),
+        'train_MAE': history.history['mae'][np.argmin(history.history['val_loss'])],
+        'val_MAE': history.history['val_mae'][np.argmin(history.history['val_loss'])],
         'test_MAE': mean_absolute_error(y_test, y_pred)
     }
+
+
     print(pd.DataFrame(accuracy_dict))
     fig = plt.figure(figsize=(7, 6))
     #test = test.reset_index()
@@ -347,10 +353,15 @@ if True:
     print("USE CASE 6 - Graph neural network prediction")
     print("___________________________")
     # generate training & test datasets
-    x_train, y_train = generate_graph_dataset(feature_storage.feature_graphs, feature_storage.training_indices, ocel)
+    train_idx, val_idx = train_test_split(feature_storage.training_indices, test_size = 0.2)
+    x_train, y_train = generate_graph_dataset(feature_storage.feature_graphs, train_idx, ocel)
     # dgl.save_graphs('train_graph_dataset', x_train, labels = {'remaining_time': tf.constant(y_train)})
     # x_train, y_train = dgl.load_graphs('train_graph_dataset')
     # y_train = y_train['remaining_time']
+    x_val, y_val = generate_graph_dataset(feature_storage.feature_graphs, val_idx, ocel)
+    # dgl.save_graphs('val_graph_dataset', x_val, labels = {'remaining_time': tf.constant(y_val)})
+    # x_val, y_val = dgl.load_graphs('val_graph_dataset')
+    # y_val = y_val['remaining_time']
     x_test, y_test = generate_graph_dataset(feature_storage.feature_graphs, feature_storage.test_indices, ocel)
     # dgl.save_graphs('test_graph_dataset', x_test, labels = {'remaining_time': tf.constant(y_test)})
     # x_test, y_test = dgl.load_graphs('test_graph_dataset')
@@ -375,6 +386,15 @@ if True:
         make_bidirected = False,
         on_gpu = False
     )
+    val_loader = GraphDataLoader(
+        x_val,
+        y_val,
+        batch_size = 64,
+        shuffle = True,
+        add_self_loop = True,
+        make_bidirected = False,
+        on_gpu = False
+    )
     test_loader = GraphDataLoader(
         x_test,
         y_test,
@@ -392,11 +412,13 @@ if True:
     loss_function = tf.keras.losses.MeanAbsoluteError()
 
     # run tensorflow training loop
-    epochs = 2
+    epochs = 30
     iter_idx = np.arange(0, train_loader.__len__())
     loss_history = []
+    val_loss_history = []
     step_losses = []
     for e in range(epochs):
+        print('Running epoch:', e)
         np.random.shuffle(iter_idx)
         current_loss = step = 0
         for batch_id in tqdm(iter_idx):
@@ -411,30 +433,41 @@ if True:
 
             step_losses.append(loss.numpy())
             current_loss += loss.numpy()
-            if (step % 100 == 0): print('Loss: %s'%((current_loss / step)))
+            # if (step % 100 == 0): print('Loss: %s'%((current_loss / step)))
             loss_history.append(current_loss / step)
+        val_predictions, val_labels = evaluate_gnn(val_loader, model)
+        val_loss = tf.keras.metrics.mean_absolute_error(np.squeeze(val_labels), np.squeeze(val_predictions)).numpy()
+        print('    Validation MAE GNN:', val_loss)
+        if len(val_loss_history) < 1:
+            model.save_weights('gnn_checkpoint.tf')
+            print('    GNN checkpoint saved.')
+        else:
+            if val_loss < np.min(val_loss_history):
+                model.save_weights('gnn_checkpoint.tf')
+                print('    GNN checkpoint saved.')
+        val_loss_history.append(val_loss)
 
     # visualize training progress
     pd.DataFrame({'loss': loss_history, 'step_losses': step_losses}).plot(subplots = True, layout = (1, 2), sharey = True)
 
-    # evaluate model on test set
-    test_predictions = []
-    test_labels = []
-    for batch_id in tqdm(range(test_loader.__len__())):
-        dgl_batch, label_batch = test_loader.__getitem__(batch_id)
-        pred = model(dgl_batch, dgl_batch.ndata['features']).numpy()
-        test_predictions.append(pred)
-        test_labels.append(label_batch.numpy())
-    test_predictions = np.concatenate(test_predictions)
-    test_labels = np.concatenate(test_labels)
+    # restore weights from best epoch
+    cp_status = model.load_weights('gnn_checkpoint.tf')
+    cp_status.assert_consumed()
+
+    # generate predictions and calculate MAE for train, val & test sets
+    train_predictions, train_labels = evaluate_gnn(train_loader, model)
+    val_predictions, val_labels = evaluate_gnn(val_loader, model)
+    test_predictions, test_labels = evaluate_gnn(test_loader, model)
     mean_prediction = np.mean(np.array(y_train))
     print('MAE baseline: ')
-    print(tf.keras.losses.mean_absolute_error(np.array(y_test), np.repeat(mean_prediction, len(y_test))).numpy())
+    print(mean_absolute_error(test_labels, np.repeat(mean_prediction, len(test_labels))))
     print('MAE GNN: ')
-    print(tf.keras.metrics.mean_absolute_error(np.squeeze(test_labels), np.squeeze(test_predictions)).numpy())
-    train_predictions, train_labels = evaluate_gnn(train_loader, model)
+    print(mean_absolute_error(test_predictions, test_labels))
+
+    # record performance of GNN
     accuracy_dict['gnn'] = {
         'train_MAE': mean_absolute_error(train_predictions, train_labels),
+        'val_MAE': mean_absolute_error(val_predictions, val_labels),
         'test_MAE': mean_absolute_error(test_predictions, test_labels)
     }
     print(pd.DataFrame(accuracy_dict))
@@ -523,9 +556,12 @@ if True:
     regressor.add(LSTM(units=10))
     regressor.add(Dropout(0.1))
     regressor.add(Dense(units=1))
-    regressor.compile(optimizer='adam', loss='mean_squared_error')
+    regressor.compile(optimizer='adam', loss='mean_squared_error', metrics = 'mae')
     K.set_value(regressor.optimizer.learning_rate, 0.005)
-    regressor.fit(x_train, y_train, epochs=30, batch_size=64)
+
+    best_weights_callback = tf.keras.callbacks.ModelCheckpoint('lstm_flat_checkpoint.h5', monitor = 'val_loss', save_best_only = True, verbose = 1)
+    history = regressor.fit(x_train, y_train, validation_split = 0.2, epochs=30, batch_size=64, callbacks = best_weights_callback)
+    regressor.load_weights('lstm_flat_checkpoint.h5')
 
     y_pred = regressor.predict(x_test)
     y_pred = np.transpose(y_pred)
@@ -536,9 +572,11 @@ if True:
     print('MAE baseline: ', mean_absolute_error(y_test, [avg_rem for elem in y_test]))
     print('MAE: ', mean_absolute_error(y_test, y_pred))
     accuracy_dict['lstm with flat'] = {
-        'train_MAE': mean_absolute_error(y_train, regressor.predict(x_train)),
+        'train_MAE': history.history['mae'][np.argmin(history.history['val_loss'])],
+        'val_MAE': history.history['val_mae'][np.argmin(history.history['val_loss'])],
         'test_MAE': mean_absolute_error(y_test, y_pred)
     }
+
     print(pd.DataFrame(accuracy_dict))
     # test = pd.DataFrame({'Predicted value': y_pred, 'Actual value': y_test})
     # fig = plt.figure(figsize=(7, 6))
